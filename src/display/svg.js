@@ -33,7 +33,7 @@ var SVG_DEFAULTS = {
   fillColor: '#000000',
 };
 
-var convertImgDataToPng = (function convertImgDataToPngClosure() {
+var convertImgData = (function convertImgDataClosure() {
   var PNG_HEADER =
     new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -182,7 +182,7 @@ var convertImgDataToPng = (function convertImgDataToPngClosure() {
     return idat;
   }
 
-  function encode(imgData, kind, forceDataSchema, isMask) {
+  function encodePng(imgData, kind, isMask) {
     var width = imgData.width;
     var height = imgData.height;
     var bitDepth, colorType, lineSize;
@@ -262,13 +262,93 @@ var convertImgDataToPng = (function convertImgDataToPngClosure() {
     offset += CHUNK_WRAPPER_SIZE + idat.length;
     writePngChunk('IEND', new Uint8Array(0), data, offset);
 
-    return createObjectURL(data, 'image/png', forceDataSchema);
+    return createObjectURL(data, 'image/png', true);
   }
 
-  return function convertImgDataToPng(imgData, forceDataSchema, isMask) {
+  function encodeBmp(imgData, kind, isMask){
+    function writeWord(buffer, value, offset) {
+      for (var i = 0; i < 4; i++) {
+        buffer[offset + i] = (value >> (8*i)) & 255;
+      }
+    }
+    var width = imgData.width;
+    var height = imgData.height;
+    var lineSize;
+    var bytes = imgData.data;
+    var dataOffset = 122;
+    var bmpData, dataSize, totalSize;
+    switch(kind){
+      case ImageKind.GRAYSCALE_1BPP:
+        var lineSizeOut = lineSize = (width + 7) >> 3;
+        for (; lineSizeOut&3; lineSizeOut++){}
+        dataOffset += 8;
+        dataSize = lineSizeOut * height;
+        totalSize = dataOffset + dataSize;
+        bmpData = new Uint8Array(totalSize);
+        bmpData[28] = 1;
+        bmpData[106] = 2;
+        bmpData.set([0x42, 0x47, 0x52, 0x73], 54);
+        bmpData[126 - 4 * isMask] = bmpData[127 - 4 * isMask] = 
+                                    bmpData[128 - 4 * isMask] = 255;
+        for (var y = 0; y < height; y++) {
+          bmpData.set(bytes.subarray(y * lineSize, (y + 1) * lineSize),
+                      dataOffset + lineSizeOut * (height - y - 1));
+        }
+        break;
+      case ImageKind.RGB_24BPP:
+        var lineSizeOut = lineSize = width * 3;
+        for (; lineSizeOut&3; lineSizeOut++){}
+        dataSize = lineSizeOut * height;
+        totalSize = dataOffset + dataSize;
+        bmpData = new Uint8Array(totalSize);
+        bmpData[28] = 24;
+        bmpData.set([0x42, 0x47, 0x52, 0x73], 70);
+        for (var y = 0; y < height; y++) {
+          var line = new Uint8Array(bytes.subarray(y * lineSize,
+                                                   (y + 1) * lineSize));
+          for (var x = 0, v = 0, n = 0; x < width; x++, n+=3) {
+            v = line[n];
+            line[n] = line[n+2];
+            line[n+2] = v;
+          }
+          bmpData.set(line, dataOffset + lineSizeOut * (height - y - 1));
+        }
+        break;
+      case ImageKind.RGBA_32BPP:
+        lineSize = width * 4;
+        dataSize = lineSize * height;
+        totalSize = dataOffset + dataSize;
+        bmpData = new Uint8Array(totalSize);
+        bmpData[28] = 32;
+        bmpData[30] = 3;
+        bmpData[54] = bmpData[59] = bmpData[64] = bmpData[69] = 255;
+        bmpData.set([0x42, 0x47, 0x52, 0x73], 70);
+        for (var y = 0; y < height; y++)
+          bmpData.set(bytes.subarray(y * lineSize, (y + 1) * lineSize),
+                      dataOffset + lineSize * (height - y - 1));
+        break;
+      default:
+        throw new Error('invalid format');
+    }
+    bmpData.set([0x42, 0x4d]);
+    writeWord(bmpData, totalSize, 2);
+    bmpData[10] = dataOffset;
+    bmpData[14] = 108;
+    writeWord(bmpData, width, 18);
+    writeWord(bmpData, height, 22);
+    bmpData[26] = 1;
+    writeWord(bmpData, dataSize, 34);
+    bmpData.set([0x13, 0xb], 38);
+    bmpData.set([0x13, 0xb], 42);
+
+    return createObjectURL(bmpData, 'image/bmp');
+  };
+
+  return function convertImgData(imgData, forceDataSchema, isMask) {
     var kind = (imgData.kind === undefined ?
                 ImageKind.GRAYSCALE_1BPP : imgData.kind);
-    return encode(imgData, kind, forceDataSchema, isMask);
+    return forceDataSchema ? encodePng(imgData, kind, isMask) : 
+                             encodeBmp(imgData, kind, isMask);
   };
 })();
 
@@ -441,6 +521,8 @@ SVGGraphics = (function SVGGraphicsClosure() {
       old.group = this.group;
       this.extraStack.push(old);
       this.current = old.clone();
+      this.current.fillPatternId = '';
+      this.current.strokePatternId = '';
       this.current.activeGradientUrl = null;
     },
 
@@ -771,7 +853,7 @@ SVGGraphics = (function SVGGraphicsClosure() {
       this.group.setAttributeNS(null, 'width', (bbox[2] - bbox[0]));
       this.group.setAttributeNS(null, 'height', (bbox[3] - bbox[1]));
       this.executeOpTree(opTree);
-      if (this.defs.childelementCount)
+      if (this.defs.childElementCount)
         this.group.appendChild(this.defs);
       this.defs = defs;
       this.defs.appendChild(this.group);
@@ -826,8 +908,8 @@ SVGGraphics = (function SVGGraphicsClosure() {
 
     setTextMatrix: function SVGGraphics_setTextMatrix(a, b, c, d, e, f) {
       var current = this.current;
-      this.current.textMatrix = this.current.lineMatrix = [a, b, c, d, e, f];
 
+      this.current.textMatrix = [a, b, c, d, e, f];
       this.current.x = this.current.lineX = 0;
       this.current.y = this.current.lineY = 0;
 
@@ -847,7 +929,6 @@ SVGGraphics = (function SVGGraphicsClosure() {
       this.current.x = this.current.lineX = 0;
       this.current.y = this.current.lineY = 0;
       this.current.textMatrix = IDENTITY_MATRIX;
-      this.current.lineMatrix = IDENTITY_MATRIX;
       this.current.tspan = this.svgFactory.createElement('svg:tspan');
       this.current.txtElement = this.svgFactory.createElement('svg:text');
       this.current.txtgrp = this.svgFactory.createElement('svg:g');
@@ -860,10 +941,10 @@ SVGGraphics = (function SVGGraphicsClosure() {
       current.xcoords = [];
       current.x = current.lineX = 0;
       current.y = current.lineY = 0;
-      current.textMatrix[4] += current.textMatrix[0] * x + 
-                               current.textMatrix[2] * y;
-      current.textMatrix[5] += current.textMatrix[1] * x + 
-                               current.textMatrix[3] * y;
+      let textMatrix = current.textMatrix.slice();
+      textMatrix[4] += textMatrix[0] * x + textMatrix[2] * y;
+      textMatrix[5] += textMatrix[1] * x + textMatrix[3] * y;
+      current.textMatrix = textMatrix;
       current.txtElement = this.svgFactory.createElement('svg:text');
       current.tspan = this.svgFactory.createElement('svg:tspan');
       if (current.fontFamily)
@@ -1336,7 +1417,7 @@ SVGGraphics = (function SVGGraphicsClosure() {
       var width = imgData.width;
       var height = imgData.height;
 
-      var imgSrc = convertImgDataToPng(imgData, this.forceDataSchema, !!mask);
+      var imgSrc = convertImgData(imgData, this.forceDataSchema, !!mask);
       var cliprect = this.svgFactory.createElement('svg:rect');
       cliprect.setAttributeNS(null, 'x', '0');
       cliprect.setAttributeNS(null, 'y', '0');

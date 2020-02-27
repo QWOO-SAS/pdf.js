@@ -124,6 +124,8 @@ class DOMSVGFactory {
     svg.setAttribute('height', height + 'px');
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    svg.setAttribute('xmlns', 'http://www.w3.org/XML/1998/namespace');
 
     return svg;
   }

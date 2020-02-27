@@ -249,6 +249,7 @@ var OPS = {
   paintImageMaskXObjectRepeat: 89,
   paintSolidColorImageMask: 90,
   constructPath: 91,
+  group: 92,
 };
 
 var verbosity = VERBOSITY_LEVELS.warnings;

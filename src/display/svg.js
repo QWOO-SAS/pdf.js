@@ -1393,6 +1393,7 @@ SVGGraphics = (function SVGGraphicsClosure() {
       var imgObj = this.objs.get(objId);
       var imgEl = this.svgFactory.createElement('svg:image');
       imgEl.setAttributeNS(XLINK_NS, 'xlink:href', imgObj.src);
+      imgEl.setAttributeNS(null, 'data-type', 'lossy');
       imgEl.setAttributeNS(null, 'width', pf(w));
       imgEl.setAttributeNS(null, 'height', pf(h));
       imgEl.setAttributeNS(null, 'x', '0');
@@ -1409,15 +1410,24 @@ SVGGraphics = (function SVGGraphicsClosure() {
         warn('Dependent image isn\'t ready yet');
         return;
       }
-      this.paintInlineImageXObject(imgData);
+      this.paintInlineImageXObject(imgData, 0, objId);
     },
 
     paintInlineImageXObject:
-        function SVGGraphics_paintInlineImageXObject(imgData, mask) {
+        function SVGGraphics_paintInlineImageXObject(imgData, mask, objId) {
       var width = imgData.width;
       var height = imgData.height;
 
-      var imgSrc = convertImgData(imgData, this.forceDataSchema, !!mask);
+      var imgSrc;
+      if (objId && this.objs.objs[objId].url) {
+        imgSrc = this.objs.objs[objId].url;
+      }
+      else {
+        imgSrc = convertImgData(imgData, this.forceDataSchema, !!mask);
+        if (objId) {
+          this.objs.objs[objId].url = imgSrc;
+        }
+      }
       var cliprect = this.svgFactory.createElement('svg:rect');
       cliprect.setAttributeNS(null, 'x', '0');
       cliprect.setAttributeNS(null, 'y', '0');

@@ -852,6 +852,7 @@ SVGGraphics = (function SVGGraphicsClosure() {
       this.group.setAttributeNS(null, 'viewBox', bbox.join(','));
       this.group.setAttributeNS(null, 'width', (bbox[2] - bbox[0]));
       this.group.setAttributeNS(null, 'height', (bbox[3] - bbox[1]));
+      this.group.setAttributeNS(null, 'preserveAspectRatio', 'none');
       this.executeOpTree(opTree);
       if (this.defs.childElementCount)
         this.group.appendChild(this.defs);

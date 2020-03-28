@@ -1034,12 +1034,8 @@ SVGGraphics = (function SVGGraphicsClosure() {
       }
 
       let transform = pm(textMatrix);
-      if (current.fontMatrix.join(' ') != FONT_IDENTITY_MATRIX.join(' ')) {
-        let fontMatrix = current.fontMatrix.slice();
-        fontMatrix.forEach(function(x, i){
-          fontMatrix[i] = x * 1000;
-        });
-        transform += ' ' + pm(fontMatrix);
+      if (current.fontMatrix[2]) {
+        transform += ' skewX(' + (1000 * current.fontMatrix[2] * 180 / Math.PI) + ')';
       }
       transform += ' scale(1, -1)';
       current.txtElement.setAttributeNS(null, 'transform', transform);

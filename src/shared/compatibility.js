@@ -52,7 +52,7 @@ PDFJS.compatibilityChecked = true;
   if (typeof Uint8ClampedArray === 'undefined') {
     // Support: IE<11
     globalScope.Uint8ClampedArray =
-      require('core-js/fn/typed/uint8-clamped-array');
+      require('core-js/features/typed-array/uint8-clamped-array');
   }
 
   if (typeof Uint8Array !== 'undefined') {
@@ -845,7 +845,7 @@ PDFJS.compatibilityChecked = true;
   if (Number.isNaN) {
     return;
   }
-  Number.isNaN = require('core-js/fn/number/is-nan');
+  Number.isNaN = require('core-js/features/number/is-nan');
 })();
 
 // Provides support for Number.isInteger in legacy browsers.
@@ -854,21 +854,21 @@ PDFJS.compatibilityChecked = true;
   if (Number.isInteger) {
     return;
   }
-  Number.isInteger = require('core-js/fn/number/is-integer');
+  Number.isInteger = require('core-js/features/number/is-integer');
 })();
 
 (function checkPromise() {
   if (globalScope.Promise) {
     return;
   }
-  globalScope.Promise = require('core-js/fn/promise');
+  globalScope.Promise = require('core-js/features/promise');
 })();
 
 (function checkWeakMap() {
   if (globalScope.WeakMap) {
     return;
   }
-  globalScope.WeakMap = require('core-js/fn/weak-map');
+  globalScope.WeakMap = require('core-js/features/weak-map');
 })();
 
 // Polyfill from https://github.com/Polymer/URL

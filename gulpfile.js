@@ -128,13 +128,14 @@ function createWebpackConfig(defines, output) {
     BUNDLE_BUILD: versionInfo.commit,
   });
   var licenseHeader = fs.readFileSync('./src/license_header.js').toString();
-  var enableSourceMaps = !bundleDefines.FIREFOX && !bundleDefines.MOZCENTRAL &&
+  var enableSourceMaps = 0 && !bundleDefines.FIREFOX && !bundleDefines.MOZCENTRAL &&
                          !bundleDefines.CHROME;
   var pdfjsNext = bundleDefines.PDFJS_NEXT ||
                   process.env['PDFJS_NEXT'] === 'true';
 
   return {
     output: output,
+    mode: 'production',
     plugins: [
       new webpack2.BannerPlugin({ banner: licenseHeader, raw: true, }),
     ],
@@ -147,14 +148,26 @@ function createWebpackConfig(defines, output) {
     },
     devtool: enableSourceMaps ? 'source-map' : undefined,
     module: {
-      loaders: [
+      rules: [
         {
           loader: 'babel-loader',
+          type: 'javascript/auto',
           // babel is too slow
           exclude: /src[\\\/]core[\\\/](glyphlist|unicode)/,
           options: {
-            presets: pdfjsNext ? undefined : ['env'],
-            plugins: ['transform-es2015-modules-commonjs'],
+            presets: pdfjsNext ? undefined : ["@babel/preset-env"],
+//            plugins: ['transform-es2015-modules-commonjs'],
+            plugins: [
+//              "@babel/plugin-proposal-logical-assignment-operators",
+              "@babel/plugin-transform-modules-commonjs",
+              [
+                "@babel/plugin-transform-runtime",
+                {
+                  helpers: false,
+                  regenerator: true,
+                },
+              ],
+            ]
           },
         },
         {
@@ -426,8 +439,6 @@ gulp.task('default', function() {
   });
 });
 
-gulp.task('extension', ['firefox', 'chromium']);
-
 gulp.task('buildnumber', function (done) {
   console.log();
   console.log('### Getting extension build number');
@@ -553,9 +564,9 @@ gulp.task('cmaps', function () {
   compressCmaps(CMAP_INPUT, VIEWER_CMAP_OUTPUT, true);
 });
 
-gulp.task('bundle', ['buildnumber'], function () {
+gulp.task('bundle', gulp.series('buildnumber', function () {
   return createBundle(DEFINES).pipe(gulp.dest(BUILD_DIR));
-});
+}));
 
 function preprocessCSS(source, mode, defines, cleanup) {
   var outName = getTempFile('~preprocess', '.css');
@@ -597,7 +608,7 @@ function preprocessJS(source, defines, cleanup) {
 
 // Builds the generic production viewer that should be compatible with most
 // modern HTML5 browsers.
-gulp.task('generic', ['buildnumber', 'locale'], function () {
+gulp.task('generic', gulp.series('buildnumber', 'locale', function () {
   console.log();
   console.log('### Creating generic viewer');
   var defines = builder.merge(DEFINES, { GENERIC: true, });
@@ -625,9 +636,9 @@ gulp.task('generic', ['buildnumber', 'locale'], function () {
     gulp.src('web/compressed.tracemonkey-pldi-09.pdf')
         .pipe(gulp.dest(GENERIC_DIR + 'web')),
   ]);
-});
+}));
 
-gulp.task('components', ['buildnumber'], function () {
+gulp.task('components', gulp.series('buildnumber', function () {
   console.log();
   console.log('### Creating generic components');
   var defines = builder.merge(DEFINES, { COMPONENTS: true, GENERIC: true, });
@@ -648,9 +659,9 @@ gulp.task('components', ['buildnumber'], function () {
     preprocessCSS('web/pdf_viewer.css', 'components', defines, true)
         .pipe(gulp.dest(COMPONENTS_DIR)),
   ]);
-});
+}));
 
-gulp.task('singlefile', ['buildnumber'], function () {
+gulp.task('singlefile', gulp.series('buildnumber', function () {
   console.log();
   console.log('### Creating singlefile build');
   var defines = builder.merge(DEFINES, { SINGLE_FILE: true, });
@@ -660,9 +671,9 @@ gulp.task('singlefile', ['buildnumber'], function () {
   rimraf.sync(SINGLE_FILE_DIR);
 
   return createBundle(defines).pipe(gulp.dest(SINGLE_FILE_BUILD_DIR));
-});
+}));
 
-gulp.task('minified-pre', ['buildnumber', 'locale'], function () {
+gulp.task('minified-pre', gulp.series('buildnumber', 'locale', function () {
   console.log();
   console.log('### Creating minified viewer');
   var defines = builder.merge(DEFINES, { MINIFIED: true, GENERIC: true, });
@@ -690,9 +701,9 @@ gulp.task('minified-pre', ['buildnumber', 'locale'], function () {
     gulp.src('web/compressed.tracemonkey-pldi-09.pdf')
         .pipe(gulp.dest(MINIFIED_DIR + 'web')),
   ]);
-});
+}));
 
-gulp.task('minified-post', ['minified-pre'], function () {
+gulp.task('minified-post', gulp.series('minified-pre', function () {
   var pdfFile = fs.readFileSync(MINIFIED_DIR + '/build/pdf.js').toString();
   var pdfWorkerFile =
     fs.readFileSync(MINIFIED_DIR + '/build/pdf.worker.js').toString();
@@ -726,11 +737,11 @@ gulp.task('minified-post', ['minified-pre'], function () {
                 MINIFIED_DIR + '/build/pdf.js');
   fs.renameSync(MINIFIED_DIR + '/build/pdf.worker.min.js',
                 MINIFIED_DIR + '/build/pdf.worker.js');
-});
+}));
 
-gulp.task('minified', ['minified-post']);
+gulp.task('minified', gulp.series('minified-post'));
 
-gulp.task('firefox-pre', ['buildnumber', 'locale'], function () {
+gulp.task('firefox-pre', gulp.series('buildnumber', 'locale', function () {
   console.log();
   console.log('### Building Firefox extension');
   var defines = builder.merge(DEFINES, { FIREFOX: true, PDFJS_NEXT: true, });
@@ -806,9 +817,9 @@ gulp.task('firefox-pre', ['buildnumber', 'locale'], function () {
     preprocessJS(FIREFOX_EXTENSION_DIR + 'bootstrap.js', defines, true)
         .pipe(gulp.dest(FIREFOX_BUILD_DIR)),
   ]);
-});
+}));
 
-gulp.task('firefox', ['firefox-pre'], function (done) {
+gulp.task('firefox', gulp.series('firefox-pre', function (done) {
   var FIREFOX_EXTENSION_FILES =
         ['bootstrap.js',
          'install.rdf',
@@ -836,9 +847,9 @@ gulp.task('firefox', ['firefox-pre'], function (done) {
     console.log('extension created: ' + FIREFOX_EXTENSION_NAME);
     done();
   });
-});
+}));
 
-gulp.task('mozcentral-pre', ['buildnumber', 'locale'], function () {
+gulp.task('mozcentral-pre', gulp.series('buildnumber', 'locale', function () {
   console.log();
   console.log('### Building mozilla-central extension');
   var defines = builder.merge(DEFINES, { MOZCENTRAL: true, PDFJS_NEXT: true, });
@@ -907,11 +918,11 @@ gulp.task('mozcentral-pre', ['buildnumber', 'locale'], function () {
         .pipe(replace(/\bPDFJSSCRIPT_PREF_PREFIX\b/g, MOZCENTRAL_PREF_PREFIX))
         .pipe(gulp.dest(MOZCENTRAL_CONTENT_DIR)),
   ]);
-});
+}));
 
-gulp.task('mozcentral', ['mozcentral-pre']);
+gulp.task('mozcentral', gulp.series('mozcentral-pre'));
 
-gulp.task('chromium-pre', ['buildnumber', 'locale'], function () {
+gulp.task('chromium-pre', gulp.series('buildnumber', 'locale', function () {
   console.log();
   console.log('### Building Chromium extension');
   var defines = builder.merge(DEFINES, { CHROME: true, PDFJS_NEXT: true, });
@@ -953,9 +964,9 @@ gulp.task('chromium-pre', ['buildnumber', 'locale'], function () {
     ], { base: 'extensions/chromium/', })
         .pipe(gulp.dest(CHROME_BUILD_DIR)),
   ]);
-});
+}));
 
-gulp.task('chromium', ['chromium-pre']);
+gulp.task('chromium', gulp.series('chromium-pre'));
 
 gulp.task('jsdoc', function (done) {
   console.log();
@@ -978,7 +989,9 @@ gulp.task('jsdoc', function (done) {
   });
 });
 
-gulp.task('lib', ['buildnumber'], function () {
+gulp.task('extension', gulp.series('firefox', 'chromium'));
+
+gulp.task('lib', gulp.series('buildnumber', function () {
   // When we create a bundle, webpack is run on the source and it will replace
   // require with __webpack_require__. When we want to use the real require,
   // __non_webpack_require__ has to be used.
@@ -1051,11 +1064,11 @@ gulp.task('lib', ['buildnumber'], function () {
     gulp.src('external/streams/streams-lib.js', { base: '.', })
       .pipe(gulp.dest('build/')),
   ]);
-});
+}));
 
-gulp.task('web-pre', ['generic', 'extension', 'jsdoc']);
+gulp.task('web-pre', gulp.series('generic', 'extension', 'jsdoc'));
 
-gulp.task('publish', ['generic'], function (done) {
+gulp.task('publish', gulp.series('generic', function (done) {
   var version = JSON.parse(
     fs.readFileSync(BUILD_DIR + 'version.json').toString()).version;
 
@@ -1074,38 +1087,38 @@ gulp.task('publish', ['generic'], function (done) {
           done();
         });
     });
-});
+}));
 
-gulp.task('test', ['generic', 'components'], function () {
+gulp.task('test', gulp.series('generic', 'components', function () {
   return streamqueue({ objectMode: true, },
     createTestSource('unit'), createTestSource('browser'));
-});
+}));
 
-gulp.task('bottest', ['generic', 'components'], function () {
+gulp.task('bottest', gulp.series('generic', 'components', function () {
   return streamqueue({ objectMode: true, },
     createTestSource('unit'), createTestSource('font'),
     createTestSource('browser (no reftest)'));
-});
+}));
 
-gulp.task('browsertest', ['generic', 'components'], function () {
+gulp.task('browsertest', gulp.series('generic', 'components', function () {
   return createTestSource('browser');
-});
+}));
 
-gulp.task('unittest', ['generic', 'components'], function () {
+gulp.task('unittest', gulp.series('generic', 'components', function () {
   return createTestSource('unit');
-});
+}));
 
 gulp.task('fonttest', function () {
   return createTestSource('font');
 });
 
-gulp.task('makeref', ['generic', 'components'], function (done) {
+gulp.task('makeref', gulp.series('generic', 'components', function (done) {
   makeRef(done);
-});
+}));
 
-gulp.task('botmakeref', ['generic', 'components'], function (done) {
+gulp.task('botmakeref', gulp.series('generic', 'components', function (done) {
   makeRef(done, true);
-});
+}));
 
 gulp.task('baseline', function (done) {
   console.log();
@@ -1143,7 +1156,7 @@ gulp.task('baseline', function (done) {
   });
 });
 
-gulp.task('unittestcli', ['lib'], function (done) {
+gulp.task('unittestcli', gulp.series('lib', function (done) {
   var args = ['JASMINE_CONFIG_PATH=test/unit/clitests.json'];
   var testProcess = spawn('node_modules/.bin/jasmine', args,
                           { stdio: 'inherit', });
@@ -1154,7 +1167,7 @@ gulp.task('unittestcli', ['lib'], function (done) {
     }
     done();
   });
-});
+}));
 
 gulp.task('lint', function (done) {
   console.log();
@@ -1226,7 +1239,7 @@ gulp.task('importl10n', function(done) {
   locales.downloadL10n(L10N_DIR, done);
 });
 
-gulp.task('gh-pages-prepare', ['web-pre'], function () {
+gulp.task('gh-pages-prepare', gulp.series('web-pre', function () {
   console.log();
   console.log('### Creating web site');
 
@@ -1246,9 +1259,9 @@ gulp.task('gh-pages-prepare', ['web-pre'], function () {
     gulp.src(JSDOC_BUILD_DIR + '**/*', { base: JSDOC_BUILD_DIR, })
         .pipe(gulp.dest(GH_PAGES_DIR + 'api/draft/')),
   ]);
-});
+}));
 
-gulp.task('wintersmith', ['gh-pages-prepare'], function (done) {
+gulp.task('wintersmith', gulp.series('gh-pages-prepare', function (done) {
   var wintersmith = require('wintersmith');
   var env = wintersmith('docs/config.json');
   env.build(GH_PAGES_DIR, function (error) {
@@ -1262,9 +1275,9 @@ gulp.task('wintersmith', ['gh-pages-prepare'], function (done) {
     console.log('Done building with wintersmith.');
     done();
   });
-});
+}));
 
-gulp.task('gh-pages-git', ['gh-pages-prepare', 'wintersmith'], function () {
+gulp.task('gh-pages-git', gulp.series('gh-pages-prepare', 'wintersmith', function () {
   var VERSION = getVersionJSON().version;
   var reason = process.env['PDFJS_UPDATE_REASON'];
 
@@ -1280,12 +1293,12 @@ gulp.task('gh-pages-git', ['gh-pages-prepare', 'wintersmith'], function () {
 
   console.log();
   console.log('Website built in ' + GH_PAGES_DIR);
-});
+}));
 
-gulp.task('web', ['gh-pages-prepare', 'wintersmith', 'gh-pages-git']);
+gulp.task('web', gulp.series('gh-pages-prepare', 'wintersmith', 'gh-pages-git'));
 
 gulp.task('dist-pre',
-          ['generic', 'singlefile', 'components', 'lib', 'minified'],
+          gulp.series('generic', 'singlefile', 'components', 'lib', 'minified',
           function () {
   var VERSION = getVersionJSON().version;
 
@@ -1380,9 +1393,9 @@ gulp.task('dist-pre',
     gulp.src(LIB_DIR + '**/*', { base: LIB_DIR, })
         .pipe(gulp.dest(DIST_DIR + 'lib/')),
   ]);
-});
+}));
 
-gulp.task('dist-install', ['dist-pre'], function () {
+gulp.task('dist-install', gulp.series('dist-pre', function () {
   var distPath = DIST_DIR;
   var opts = {};
   var installPath = process.env['PDFJS_INSTALL_PATH'];
@@ -1391,9 +1404,9 @@ gulp.task('dist-install', ['dist-pre'], function () {
     distPath = path.relative(installPath, distPath);
   }
   safeSpawnSync('npm', ['install', distPath], opts);
-});
+}));
 
-gulp.task('dist-repo-git', ['dist-pre'], function () {
+gulp.task('dist-repo-git', gulp.series('dist-pre', function () {
   var VERSION = getVersionJSON().version;
 
   console.log();
@@ -1411,11 +1424,11 @@ gulp.task('dist-repo-git', ['dist-pre'], function () {
   console.log('  cd ' + DIST_DIR + '; ' +
               'git push --tags ' + DIST_REPO_URL + ' master');
   console.log();
-});
+}));
 
-gulp.task('dist', ['dist-repo-git']);
+gulp.task('dist', gulp.series('dist-repo-git'));
 
-gulp.task('mozcentralbaseline', ['baseline'], function (done) {
+gulp.task('mozcentralbaseline', gulp.series('baseline', function (done) {
   console.log();
   console.log('### Creating mozcentral baseline environment');
 
@@ -1440,9 +1453,9 @@ gulp.task('mozcentralbaseline', ['baseline'], function (done) {
                       { cwd: MOZCENTRAL_BASELINE_DIR, });
         done();
       });
-});
+}));
 
-gulp.task('mozcentraldiff', ['mozcentral', 'mozcentralbaseline'],
+gulp.task('mozcentraldiff', gulp.series('mozcentral', 'mozcentralbaseline',
     function (done) {
   console.log();
   console.log('### Creating mozcentral diff');
@@ -1470,7 +1483,7 @@ gulp.task('mozcentraldiff', ['mozcentral', 'mozcentralbaseline'],
             done();
           });
       });
-});
+}));
 
 gulp.task('externaltest', function () {
   gutil.log('Running test-fixtures.js');

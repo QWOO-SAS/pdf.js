@@ -27,7 +27,7 @@ module.exports = function (source) {
   this.cacheable();
 
   var filePath = this.resourcePath;
-  var context = this.options.context;
+  var context = this.rootContext;
   var sourcePath = path.relative(context, filePath).split(path.sep).join('/');
 
   var ctx = Object.create(this.query);
@@ -40,4 +40,5 @@ module.exports = function (source) {
   // escodegen does not embed source -- setting map's sourcesContent.
   map.sourcesContent = [source];
   callback(null, sourceAndMap.code, map);
+  return undefined;
 };

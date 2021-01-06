@@ -703,7 +703,7 @@ gulp.task('minified-pre', gulp.series('buildnumber', 'locale', function () {
   ]);
 }));
 
-gulp.task('minified-post', gulp.series('minified-pre', function () {
+gulp.task('minified-post', gulp.series('minified-pre', function (done) {
   var pdfFile = fs.readFileSync(MINIFIED_DIR + '/build/pdf.js').toString();
   var pdfWorkerFile =
     fs.readFileSync(MINIFIED_DIR + '/build/pdf.worker.js').toString();
@@ -737,6 +737,7 @@ gulp.task('minified-post', gulp.series('minified-pre', function () {
                 MINIFIED_DIR + '/build/pdf.js');
   fs.renameSync(MINIFIED_DIR + '/build/pdf.worker.min.js',
                 MINIFIED_DIR + '/build/pdf.worker.js');
+  return done();
 }));
 
 gulp.task('minified', gulp.series('minified-post'));
